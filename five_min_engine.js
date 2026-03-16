@@ -41,6 +41,7 @@ function getSnapshotValue(snapshot, side, field) {
 
 function createFiveMinEngine(options = {}) {
   const maxBars = Number(options.maxBars || 50);
+  const onBarClose = typeof options.onBarClose === "function" ? options.onBarClose : null;
 
   const state = {
     currentBucket: null,
@@ -318,6 +319,12 @@ function createFiveMinEngine(options = {}) {
     return {
       tStart: bucket.tStart,
       tEnd: bucket.tEnd,
+      ohlc: {
+        o: bucket.mcxOpen,
+        h: bucket.mcxHigh,
+        l: bucket.mcxLow,
+        c: bucket.mcxClose
+      },
       barState,
       score: barScore,
       inputs: {
@@ -393,6 +400,10 @@ function createFiveMinEngine(options = {}) {
     }
 
     state.lastClosedBar = bar;
+
+    if (onBarClose) {
+      onBarClose(bar);
+    }
 
     console.log("[5M] Closed bar", {
       tStart: bar.tStart,

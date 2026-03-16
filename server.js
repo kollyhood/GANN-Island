@@ -11,6 +11,8 @@ const { createMarketState } = require("./market_state");
 const { createMarketRouter } = require("./market_routes");
 const { createFiveMinEngine } = require("./five_min_engine");
 const { createSignal5mRouter } = require("./signal_5m_routes");
+const { createGannRetestEngine } = require("./gann_retest_engine");
+const { createGannRetestRouter } = require("./gann_retest_routes");
 
 const app = express();
 const bus = new EventEmitter();
@@ -41,7 +43,39 @@ const marketState = createMarketState({
   etfName: process.env.SILVERBEES_NAME || "SILVERBEES"
 });
 
-const fiveMinEngine = createFiveMinEngine({ maxBars: 50 });
+const gannRetestEngine = createGannRetestEngine({
+  mode: process.env.GANN_RETEST_MODE || "observe",
+  timeframe: process.env.GANN_RETEST_TIMEFRAME || "5m",
+  step: process.env.GANN_STEP ? Number(process.env.GANN_STEP) : null,
+  levelCount: process.env.GANN_LEVEL_COUNT ? Number(process.env.GANN_LEVEL_COUNT) : 8,
+  includeOpenHighLow: process.env.GANN_INCLUDE_OPEN_LEVELS === "false" ? false : true,
+  retestWindowBars: process.env.GANN_RETEST_WINDOW ? Number(process.env.GANN_RETEST_WINDOW) : 6,
+  toleranceMode: process.env.GANN_TOLERANCE_MODE || "absolute",
+  toleranceValue: process.env.GANN_TOLERANCE_VALUE ? Number(process.env.GANN_TOLERANCE_VALUE) : 0.2,
+  stopBufferMode: process.env.GANN_STOP_BUFFER_MODE || "absolute",
+  stopBufferValue: process.env.GANN_STOP_BUFFER_VALUE ? Number(process.env.GANN_STOP_BUFFER_VALUE) : 0.1,
+  oneTradePerLevel: process.env.GANN_ONE_TRADE_PER_LEVEL === "false" ? false : true,
+  allowLong: process.env.GANN_ALLOW_LONG === "false" ? false : true,
+  allowShort: process.env.GANN_ALLOW_SHORT === "false" ? false : true,
+  tickSize: process.env.GANN_TICK_SIZE ? Number(process.env.GANN_TICK_SIZE) : null
+});
+
+const fiveMinEngine = createFiveMinEngine({
+  maxBars: 50,
+  onBarClose: (bar) => {
+    if (!bar || !bar.ohlc) {
+      return;
+    }
+
+    gannRetestEngine.onCandleClose({
+      ts: bar.tEnd,
+      o: bar.ohlc.o,
+      h: bar.ohlc.h,
+      l: bar.ohlc.l,
+      c: bar.ohlc.c
+    });
+  }
+});
 
 function nowMs() {
   return Date.now();
@@ -393,6 +427,7 @@ app.get("/ticks/by-source", (req, res) => {
 
 app.use(createMarketRouter(marketState));
 app.use(createSignal5mRouter(fiveMinEngine));
+app.use(createGannRetestRouter(gannRetestEngine));
 
 function shutdown() {
   console.log("Shutdown started");
